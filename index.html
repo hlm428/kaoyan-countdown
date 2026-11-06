@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>倒计时 · 每日打卡</title>
+
+<script>
+/* ============================================================
+   倒计时日期配置 —— 只改这里，格式固定 YYYY-MM-DD
+   列表会自动按日期从近到远排列
+   雅思为暂定目标日期，确定后直接改下面这一行即可
+   ============================================================ */
+window.EXAMS = [
+  { name: '翻硕考研初试', date: '2026-12-19' },
+  { name: 'CET-6',        date: '2026-12-12' },
+  { name: '雅思',         date: '2026-12-30' },
+];
+</script>
+
+<style>
+  :root{
+    --bg:#f6f7f5;
+    --card:#ffffff;
+    --line:#e8eae6;
+    --ink:#2c332f;
+    --muted:#8b948e;
+    --accent:#5b7f6c;
+    --accent-soft:#edf3ee;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{max-width:480px;margin:0 auto;padding:28px 18px calc(30px + env(safe-area-inset-bottom))}
+
+  header{margin-bottom:22px}
+  h1{font-size:20px;font-weight:600;letter-spacing:.04em;margin:0 0 4px}
+  .today{font-size:12.5px;color:var(--muted);margin:0}
+
+  section{margin-bottom:18px}
+  .label{font-size:11.5px;letter-spacing:.14em;color:var(--muted);margin:0 0 10px 3px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+
+  /* 倒计时 */
+  .cd-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-top:1px solid var(--line)}
+  .cd-row:first-child{border-top:0}
+  .cd-name{font-size:15px;font-weight:500}
+  .cd-meta{font-size:11.5px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+  .cd-right{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+  .cd-num{font-size:30px;font-weight:600;line-height:1;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .cd-num.is-today{font-size:19px}
+  .cd-unit{font-size:11.5px;color:var(--muted)}
+
+  /* 连续打卡 */
+  .streak{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;background:var(--accent-soft);border:1px solid #dbe7de;border-radius:16px}
+  .streak-title{font-size:14px;font-weight:600}
+  .streak-hint{font-size:11.5px;color:#748a7c;margin-top:3px}
+  .streak-value{white-space:nowrap}
+  .streak-num{font-size:30px;font-weight:600;line-height:1;color:var(--accent);font-variant-numeric:tabular-nums}
+  .streak-unit{font-size:12px;color:var(--accent);margin-left:3px}
+
+  /* 清单 */
+  .card-head{padding:16px 16px 14px}
+  .progress-top{display:flex;justify-content:space-between;align-items:baseline}
+  .card-title{font-size:14px;font-weight:600}
+  .progress-text{font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}
+  .progress-track{height:4px;background:#eef0ec;border-radius:999px;margin-top:11px;overflow:hidden}
+  .progress-fill{height:100%;width:0;background:var(--accent);border-radius:999px;transition:width .25s ease}
+  ul{list-style:none;margin:0;padding:0}
+  .task{display:flex;align-items:center;gap:6px;padding:0 10px 0 16px;border-top:1px solid var(--line);min-height:50px}
+  .task-main{display:flex;align-items:center;gap:12px;flex:1;min-width:0;padding:12px 0;cursor:pointer}
+  .task-check{
+    appearance:none;-webkit-appearance:none;
+    width:20px;height:20px;flex:0 0 20px;margin:0;
+    border:1.5px solid #c9d1ca;border-radius:6px;background:#fff;
+    display:grid;place-content:center;cursor:pointer;
+    transition:background .15s,border-color .15s;
+  }
+  .task-check:checked{background:var(--accent);border-color:var(--accent)}
+  .task-check:checked::after{content:"";width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+  .task-check:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .task-text{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .15s}
+  .task.done .task-text{color:var(--muted);text-decoration:line-through;text-decoration-color:#c8cfc9}
+  .task-del{border:0;background:transparent;color:#b9c1ba;font-size:20px;line-height:1;width:36px;height:36px;flex:0 0 36px;border-radius:8px;cursor:pointer}
+  .task-del:hover,.task-del:focus-visible{color:#b4645c;background:#f7efee;outline:none}
+  .empty{padding:22px 16px;text-align:center;color:var(--muted);font-size:13px;border-top:1px solid var(--line)}
+  .add-row{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);background:#fcfdfc}
+  #new-task{flex:1;min-width:0;border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 12px;font:inherit;font-size:14px;color:var(--ink);outline:none}
+  #new-task:focus{border-color:var(--accent)}
+  #add-btn{border:0;background:var(--accent);color:#fff;border-radius:10px;padding:0 16px;font:inherit;font-size:14px;cursor:pointer}
+  #add-btn:active{opacity:.85}
+
+  footer{text-align:center;color:#a3aaa4;font-size:11.5px;margin-top:28px;letter-spacing:.04em}
+  .note{text-align:center;color:#b4645c;font-size:11.5px;margin:10px 0 0}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>倒计时 · 每日打卡</h1>
+    <p class="today" id="today"></p>
+  </header>
+
+  <section>
+    <p class="label">距离考试</p>
+    <div class="card" id="countdown-list"></div>
+  </section>
+
+  <section>
+    <div class="streak">
+      <div>
+        <div class="streak-title">连续打卡</div>
+        <div class="streak-hint" id="streak-hint"></div>
+      </div>
+      <div class="streak-value"><span class="streak-num" id="streak-num">0</span><span class="streak-unit">天</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <div class="card-head">
+        <div class="progress-top">
+          <span class="card-title">今日清单</span>
+          <span class="progress-text" id="progress-text">0 / 0</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+      <ul id="task-list"></ul>
+      <div class="add-row">
+        <input id="new-task" type="text" maxlength="40" placeholder="添加一项任务…" autocomplete="off">
+        <button id="add-btn" type="button">添加</button>
+      </div>
+    </div>
+  </section>
+
+  <footer id="footer">22:30 之后不学习</footer>
+  <p class="note" id="storage-note" hidden>浏览器未允许本地存储，数据仅保留在当前页面。</p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var STORE_KEY = 'kaoyan_daily_v1';
+  var DEFAULT_TASKS = [
+    { id: 'p1', text: '翻硕翻译练习' },
+    { id: 'p2', text: '雅思听力' },
+    { id: 'p3', text: '六级真题' },
+    { id: 'p4', text: '背单词' }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+  var keyOf = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  var dayStart = function (d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+  var shiftDay = function (d, n) { var x = dayStart(d); x.setDate(x.getDate() + n); return x; };
+  var weekCN = function (d) { return ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]; };
+  var has = function (obj, k) { return Object.prototype.hasOwnProperty.call(obj, k); };
+
+  var storageOK = true;
+
+  function load() {
+    var raw = null;
+    try { raw = localStorage.getItem(STORE_KEY); }
+    catch (e) { storageOK = false; }
+    var s = null;
+    try { s = raw ? JSON.parse(raw) : null; }
+    catch (e) { s = null; }
+    if (!s || typeof s !== 'object') s = {};
+    if (!Array.isArray(s.tasks)) s.tasks = DEFAULT_TASKS.map(function (t) { return { id: t.id, text: t.text }; });
+    if (!s.checked || typeof s.checked !== 'object') s.checked = {};
+    if (!s.checkins || typeof s.checkins !== 'object') s.checkins = {};
+    if (typeof s.date !== 'string') s.date = keyOf(new Date());
+    return s;
+  }
+
+  var state = load();
+
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+    catch (e) { storageOK = false; $('storage-note').hidden = false; }
+  }
+
+  // 跨天：清空当日勾选，保留任务列表与历史打卡记录
+  function ensureToday() {
+    var k = keyOf(new Date());
+    if (state.date !== k) {
+      state.date = k;
+      state.checked = {};
+      save();
+      return true;
+    }
+    return false;
+  }
+
+  // 当天只要有任意一项处于完成状态，就算这一天打了卡
+  function syncCheckin() {
+    var any = state.tasks.some(function (t) { return !!state.checked[t.id]; });
+    if (any) state.checkins[state.date] = true;
+    else delete state.checkins[state.date];
+  }
+
+  function streakCount() {
+    var d = dayStart(new Date());
+    if (!has(state.checkins, keyOf(d))) d = shiftDay(d, -1);
+    var n = 0;
+    while (has(state.checkins, keyOf(d))) { n++; d = shiftDay(d, -1); }
+    return n;
+  }
+
+  function doneCount() {
+    return state.tasks.filter(function (t) { return !!state.checked[t.id]; }).length;
+  }
+
+  function renderHeader() {
+    var n = new Date();
+    $('today').textContent = n.getFullYear() + ' 年 ' + (n.getMonth() + 1) + ' 月 ' + n.getDate() + ' 日 · 星期' + weekCN(n);
+  }
+
+  function renderCountdowns() {
+    var box = $('countdown-list');
+    box.textContent = '';
+    var today = dayStart(new Date());
+    window.EXAMS.slice().sort(function (a, b) { return a.date.localeCompare(b.date); }).forEach(function (ex) {
+      var p = String(ex.date).split('-').map(Number);
+      var target = new Date(p[0], p[1] - 1, p[2]);
+      var diff = Math.round((target - today) / 86400000);
+
+      var row = document.createElement('div');
+      row.className = 'cd-row';
+
+      var left = document.createElement('div');
+      var name = document.createElement('div');
+      name.className = 'cd-name';
+      name.textContent = ex.name;
+      var meta = document.createElement('div');
+      meta.className = 'cd-meta';
+      meta.textContent = p[0] + '.' + pad(p[1]) + '.' + pad(p[2]) + ' · 周' + (isNaN(target.getTime()) ? '-' : weekCN(target));
+      left.appendChild(name);
+      left.appendChild(meta);
+
+      var right = document.createElement('div');
+      right.className = 'cd-right';
+      var num = document.createElement('span');
+      num.className = 'cd-num';
+      var unit = document.createElement('span');
+      unit.className = 'cd-unit';
+      if (!isFinite(diff)) {
+        num.textContent = '—';
+        unit.textContent = '日期有误';
+      } else if (diff > 0) {
+        num.textContent = String(diff);
+        unit.textContent = '天';
+      } else if (diff === 0) {
+        num.textContent = '今天';
+        num.className = 'cd-num is-today';
+        unit.textContent = '';
+      } else {
+        num.textContent = String(-diff);
+        unit.textContent = '天前';
+      }
+      right.appendChild(num);
+      if (unit.textContent) right.appendChild(unit);
+
+      row.appendChild(left);
+      row.appendChild(right);
+      box.appendChild(row);
+    });
+  }
+
+  function renderStats() {
+    var total = state.tasks.length;
+    var done = doneCount();
+    $('progress-text').textContent = done + ' / ' + total;
+    $('progress-fill').style.width = (total ? (done / total * 100) : 0) + '%';
+
+    $('streak-num').textContent = String(streakCount());
+    var todayDone = has(state.checkins, keyOf(new Date()));
+    $('streak-hint').textContent = todayDone
+      ? '今天已打卡 · 保持住'
+      : (streakCount() > 0 ? '今天完成一项就接上' : '完成一项，就算打卡一天');
+  }
+
+  function renderTasks() {
+    var list = $('task-list');
+    list.textContent = '';
+
+    if (!state.tasks.length) {
+      var empty = document.createElement('li');
+      empty.className = 'empty';
+      empty.textContent = '还没有任务，添加一项吧';
+      list.appendChild(empty);
+      return;
+    }
+
+    state.tasks.forEach(function (t) {
+      var li = document.createElement('li');
+      li.className = 'task' + (state.checked[t.id] ? ' done' : '');
+
+      var label = document.createElement('label');
+      label.className = 'task-main';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'task-check';
+      cb.checked = !!state.checked[t.id];
+      cb.setAttribute('aria-label', t.text);
+      var text = document.createElement('span');
+      text.className = 'task-text';
+      text.textContent = t.text;
+      label.appendChild(cb);
+      label.appendChild(text);
+
+      cb.addEventListener('change', function () {
+        if (cb.checked) state.checked[t.id] = true;
+        else delete state.checked[t.id];
+        li.classList.toggle('done', cb.checked);
+        syncCheckin();
+        save();
+        renderStats();
+      });
+
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'task-del';
+      del.textContent = '×';
+      del.setAttribute('aria-label', '删除「' + t.text + '」');
+      del.addEventListener('click', function () {
+        state.tasks = state.tasks.filter(function (x) { return x.id !== t.id; });
+        delete state.checked[t.id];
+        syncCheckin();
+        save();
+        renderTasks();
+        renderStats();
+      });
+
+      li.appendChild(label);
+      li.appendChild(del);
+      list.appendChild(li);
+    });
+  }
+
+  function renderFooter() {
+    var n = new Date();
+    var late = n.getHours() * 60 + n.getMinutes() >= 22 * 60 + 30;
+    $('footer').textContent = late ? '22:30 之后不学习 · 该休息了' : '22:30 之后不学习';
+  }
+
+  function addTask() {
+    var input = $('new-task');
+    var text = input.value.trim().replace(/\s+/g, ' ');
+    if (!text) return;
+    state.tasks.push({
+      id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      text: text.slice(0, 40)
+    });
+    input.value = '';
+    save();
+    renderTasks();
+    renderStats();
+  }
+
+  $('add-btn').addEventListener('click', addTask);
+  $('new-task').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); addTask(); }
+  });
+
+  function refreshAll() {
+    if (ensureToday()) renderTasks();
+    renderHeader();
+    renderCountdowns();
+    renderStats();
+    renderFooter();
+  }
+
+  ensureToday();
+  renderHeader();
+  renderCountdowns();
+  renderTasks();
+  renderStats();
+  renderFooter();
+  if (!storageOK) $('storage-note').hidden = false;
+
+  // 每分钟检查跨天、日期与 22:30 状态；切回页面时立即刷新
+  setInterval(refreshAll, 60000);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) refreshAll();
+  });
+})();
+</script>
+</body>
+</html>
